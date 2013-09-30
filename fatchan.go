@@ -12,6 +12,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"math/big"
 )
 
 var debug = false
@@ -683,6 +684,60 @@ type reader interface {
 func (t *Transport) decodeValue(r reader, val reflect.Value) error {
 	// TODO(kevlar): Break out "decodeUvarint" and "decodeString" so that we
 	// don't need the decodeValue(r, reflect.ValueOf(...).Elem()) construct.
+
+	// TJIM: special case to decode big.Int
+	// big.Int has unexported fields so the usual method fails on reflect.Set functions
+	if val.Type().PkgPath() == "math/big" && val.Type().Name() == "Int" {
+		// Start off by the usual decoding of struct name and number of fields
+		styp := val.Type()
+		var name string
+		var fields uint
+		if err := t.decodeValue(r, reflect.ValueOf(&name).Elem()); err != nil {
+			return err
+		}
+		if err := t.decodeValue(r, reflect.ValueOf(&fields).Elem()); err != nil {
+			return err
+		}
+		if got, want := name, styp.Name(); got != want {
+			return fmt.Errorf("attempted to decode %q into %q: struct name mismatch", got, want)
+		}
+		if got, want := fields, uint(styp.NumField()); got != want {
+			return fmt.Errorf("attempted to decode %d fields into %d fields: struct field count mismatch", got, want)
+		}
+		// There are two fields, decode WITHOUT using the reflect.Set methods
+		// The first field, "neg", is a bool
+		negv := reflect.New(reflect.TypeOf(true)).Elem()
+		if err := t.decodeValue(r, negv); err != nil {
+			return err
+		}
+		// convert from reflect.Value back to bool
+		negc := make(chan bool)
+		go func () {
+			rch := reflect.ValueOf(negc)
+			rch.Send(negv)
+		}()
+		neg := <-negc
+		// The second field, "abs", is a []big.Word
+		absv := reflect.New(reflect.SliceOf(reflect.TypeOf(big.Word(0)))).Elem()
+		if err := t.decodeValue(r, absv); err != nil {
+			return err
+		}
+		absc := make(chan []big.Word)
+		go func () {
+			rch := reflect.ValueOf(absc)
+			rch.Send(absv)
+		}()
+		abs := <-absc
+		// Now we have fields abs and neg, construct a big.Int from them
+		result := big.NewInt(0)
+		result.SetBits(abs)
+		if neg {
+			result.Neg(result)
+		}
+		// Overwrite val (which started as the big.Int zero value) with the decoded big.Int
+		val.Set(reflect.ValueOf(result).Elem())
+		return nil
+	}
 
 	// Delegate out basic types
 	switch val.Kind() {
