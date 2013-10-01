@@ -711,23 +711,13 @@ func (t *Transport) decodeValue(r reader, val reflect.Value) error {
 			return err
 		}
 		// convert from reflect.Value back to bool
-		negc := make(chan bool)
-		go func () {
-			rch := reflect.ValueOf(negc)
-			rch.Send(negv)
-		}()
-		neg := <-negc
+		neg := negv.Interface().(bool)
 		// The second field, "abs", is a []big.Word
 		absv := reflect.New(reflect.SliceOf(reflect.TypeOf(big.Word(0)))).Elem()
 		if err := t.decodeValue(r, absv); err != nil {
 			return err
 		}
-		absc := make(chan []big.Word)
-		go func () {
-			rch := reflect.ValueOf(absc)
-			rch.Send(absv)
-		}()
-		abs := <-absc
+		abs := absv.Interface().([]big.Word)
 		// Now we have fields abs and neg, construct a big.Int from them
 		result := big.NewInt(0)
 		result.SetBits(abs)
