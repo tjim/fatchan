@@ -51,14 +51,14 @@ func (t *Transport) debug(format string, args ...interface{}) {
 			return
 		}
 	}
-	fmt.Printf("[%2d] DEBUG: %s\n", t.sid, fmt.Sprintf(format, args...))
+	log.Printf("[sid=%x] DEBUG: %s\n", t.sid, fmt.Sprintf(format, args...))
 }
 
 func logError(sid, cid uint64, err error) {
 	if err == io.EOF {
 		return
 	}
-	log.Printf("fatchan[sid=%d,cid=%d] error: %s", sid, cid, err)
+	log.Printf("fatchan[sid=%x,cid=%x] error: %s", sid, cid, err)
 }
 
 // New creates a Transport with the given ReadWriteCloser (usually a net.Conn).
@@ -178,10 +178,10 @@ nextMessage:
 					}
 
 					if reply[0] == 'A' {
-						t.debug("[%d] awaiting register", cid)
+						t.debug("[%x] awaiting register", cid)
 						pendingAlloc[cid] = nil
 					} else {
-						t.debug("[%d] failed alloc", cid)
+						t.debug("[%x] failed alloc", cid)
 					}
 
 					// Make sure the nextCID is high enough (always)
@@ -193,7 +193,7 @@ nextMessage:
 					// Decode the data
 					ack := typ == 'A'
 					cid, _ := binary.Uvarint(data)
-					t.debug("[%d] alloc ack=%v", cid, ack)
+					t.debug("[%x] alloc ack=%v", cid, ack)
 
 					if exp, ok := pendingExplicit[cid]; ok {
 						var err error
@@ -224,7 +224,7 @@ nextMessage:
 					continue
 				}
 				t.debug("unknown cid %#v receiving data %q", c, c.data)
-				t.err(t.sid, c.cid, fmt.Errorf("unknown cid %d with data %q", c.cid, c.data))
+				t.err(t.sid, c.cid, fmt.Errorf("unknown cid %x with data %q", c.cid, c.data))
 				continue
 			}
 			if c.data == nil {
@@ -232,7 +232,7 @@ nextMessage:
 				close(ch)
 				continue
 			}
-			t.debug("[%d] dispatch %q", c.cid, c.data)
+			t.debug("[%x] dispatch %q", c.cid, c.data)
 			ch <- c.data
 
 		// Handle queries
@@ -292,9 +292,9 @@ nextMessage:
 				continue nextMessage
 			case *register:
 				chans[q.cid] = q.data
-				t.debug("[%d] chan registered", q.cid)
+				t.debug("[%x] chan registered", q.cid)
 				for _, pending := range pendingAlloc[q.cid] {
-					t.debug("[%d] queued data %q", q.cid, pending)
+					t.debug("[%x] queued data %q", q.cid, pending)
 					q.data <- pending // TODO(kevlar): this seems racy... run in a goroutine?
 				}
 				delete(pendingAlloc, q.cid)
@@ -518,13 +518,13 @@ func (t *Transport) toChan(cid uint64, cval reflect.Value) error {
 
 		etyp := cval.Type().Elem()
 		for data := range recv {
-			t.debug("[%d] new data %q", cid, data)
+			t.debug("[%x] new data %q", cid, data)
 			v := reflect.New(etyp).Elem()
 			if err := t.decodeValue(bytes.NewReader(data), v); err != nil {
 				t.err(sid, cid, err)
 				return
 			}
-			t.debug("[%d] sending %#v", cid, v.Interface())
+			t.debug("[%x] sending %#v", cid, v.Interface())
 			cval.Send(v)
 		}
 	}()
