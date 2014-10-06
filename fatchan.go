@@ -8,12 +8,12 @@ import (
 	"io"
 	"log"
 	"math"
+	"math/big"
+	"os"
 	"reflect"
 	"sync"
 	"sync/atomic"
 	"time"
-	"math/big"
-	"os"
 )
 
 var debug = false
@@ -188,7 +188,10 @@ nextMessage:
 					if cid >= nextCID {
 						nextCID = cid + 1
 					}
-					t.writeBuf(0, bytes.NewBuffer(reply))
+					if err := t.writeBuf(0, bytes.NewBuffer(reply)); err != nil {
+						t.err(t.sid, cid, err)
+						break
+					}
 				case 'A', 'N':
 					// Decode the data
 					ack := typ == 'A'
@@ -270,7 +273,10 @@ nextMessage:
 				var raw [8]byte
 				raw[0] = 'X'
 				n := 1 + binary.PutUvarint(raw[1:], q.cid)
-				t.writeBuf(0, bytes.NewBuffer(raw[:n]))
+				if err := t.writeBuf(0, bytes.NewBuffer(raw[:n])); err != nil {
+					t.err(t.sid, q.cid, err)
+					break
+				}
 				continue nextMessage
 			case *implicitID:
 				q.cid, nextCID = nextCID, nextCID+1
@@ -288,7 +294,10 @@ nextMessage:
 				var raw [8]byte
 				raw[0] = 'I'
 				n := 1 + binary.PutUvarint(raw[1:], q.cid)
-				t.writeBuf(0, bytes.NewBuffer(raw[:n]))
+				if err := t.writeBuf(0, bytes.NewBuffer(raw[:n])); err != nil {
+					t.err(t.sid, q.cid, err)
+					break
+				}
 				continue nextMessage
 			case *register:
 				chans[q.cid] = q.data
@@ -404,7 +413,10 @@ func (t *Transport) fromChan(cid uint64, cval reflect.Value) error {
 			v, ok := cval.Recv()
 			if !ok {
 				// send close message
-				t.writeBuf(cid, buf)
+				if err := t.writeBuf(cid, buf); err != nil {
+					t.err(sid, cid, err)
+					break
+				}
 				return
 			}
 
