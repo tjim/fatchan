@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 	"math/big"
+	"os"
 )
 
 var debug = false
@@ -44,7 +45,11 @@ type Transport struct {
 
 func (t *Transport) debug(format string, args ...interface{}) {
 	if !debug {
-		return
+		if os.Getenv("FATCHAN_DEBUG") != "" {
+			debug = true
+		} else {
+			return
+		}
 	}
 	fmt.Printf("[%2d] DEBUG: %s\n", t.sid, fmt.Sprintf(format, args...))
 }
