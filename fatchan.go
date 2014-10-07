@@ -499,7 +499,7 @@ func (t *Transport) toChan(cid uint64, cval reflect.Value) error {
 		return fmt.Errorf("fatchan: cannot connect a %s - must be a channel", cval.Type())
 	}
 	if cval.Type().ChanDir()&reflect.SendDir == 0 {
-		return fmt.Errorf("fatchan: cannot connect a %s - recieve-only channel", cval.Type())
+		return fmt.Errorf("fatchan: cannot connect a %s - receive-only channel", cval.Type())
 	}
 
 	// Register our channel
