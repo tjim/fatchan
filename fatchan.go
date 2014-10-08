@@ -92,7 +92,7 @@ func New(rwc io.ReadWriteCloser, onError func(sid, cid uint64, err error)) *Tran
 func (t *Transport) Close() error {
 	t.debug("close")
 	close(t.query)
-	<-t.done
+	<-t.done // Block until t.done is closed (nothing is sent on t.done)
 	err := t.rwc.Close()
 	t.debug("close complete")
 	return err
@@ -113,7 +113,9 @@ func (t *Transport) CID(channel interface{}) uint64 {
 		done:    make(done, 1),
 	}
 	t.query <- q
-	<-q.done
+	if err := <-q.done; err != nil {
+		panic("CID")
+	}
 	return q.cid
 }
 
@@ -315,7 +317,11 @@ nextMessage:
 			q.Done(err)
 
 		// Handle messages
-		case m := <-t.msg:
+		case m, ok := <-t.msg:
+			if !ok {
+				t.debug("msg closed")
+				return
+			}
 			switch m := m.(type) {
 			case *unregister:
 				delete(chans, m.cid)
@@ -510,7 +516,9 @@ func (t *Transport) toChan(cid uint64, cval reflect.Value) error {
 		done: make(done, 1),
 	}
 	t.query <- reg
-	<-reg.done
+	if err := <-reg.done; err != nil {
+		return err
+	}
 	sid, cid := t.sid, reg.cid
 
 	go func() {
